@@ -1215,50 +1215,43 @@ QString MainWindow::resolveProxifierProfilePath() const
 QDomDocument MainWindow::createDefaultProxifierProfile() const
 {
     QDomDocument doc;
-    QDomProcessingInstruction header = doc.createProcessingInstruction("xml", "version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"");
-    doc.appendChild(header);
-
-    QDomElement root = doc.createElement("ProxifierProfile");
-    root.setAttribute("version", "102");
-    root.setAttribute("platform", "Windows");
-    root.setAttribute("product_id", "0");
-    root.setAttribute("product_minver", "400");
-    doc.appendChild(root);
-
-    QDomElement options = doc.createElement("Options");
-    root.appendChild(options);
-
-    QDomElement proxyList = doc.createElement("ProxyList");
-    root.appendChild(proxyList);
-
-    QDomElement chainList = doc.createElement("ChainList");
-    root.appendChild(chainList);
-
-    QDomElement ruleList = doc.createElement("RuleList");
-    root.appendChild(ruleList);
-
-    QDomElement localhostRule = doc.createElement("Rule");
-    localhostRule.setAttribute("enabled", "true");
-    QDomElement localhostAction = doc.createElement("Action");
-    localhostAction.setAttribute("type", "Direct");
-    localhostRule.appendChild(localhostAction);
-    QDomElement localhostTargets = doc.createElement("Targets");
-    localhostTargets.appendChild(doc.createTextNode("localhost; 127.0.0.1; %ComputerName%; ::1"));
-    localhostRule.appendChild(localhostTargets);
-    QDomElement localhostName = doc.createElement("Name");
-    localhostName.appendChild(doc.createTextNode("Localhost"));
-    localhostRule.appendChild(localhostName);
-    ruleList.appendChild(localhostRule);
-
-    QDomElement defaultRule = doc.createElement("Rule");
-    defaultRule.setAttribute("enabled", "true");
-    QDomElement defaultAction = doc.createElement("Action");
-    defaultAction.setAttribute("type", "Direct");
-    defaultRule.appendChild(defaultAction);
-    QDomElement defaultName = doc.createElement("Name");
-    defaultName.appendChild(doc.createTextNode("Default"));
-    defaultRule.appendChild(defaultName);
-    ruleList.appendChild(defaultRule);
+    const QString xmlTemplate =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        "<ProxifierProfile version=\"102\" platform=\"Windows\" product_id=\"0\" product_minver=\"400\">"
+        "<Options>"
+        "<Resolve>"
+        "<AutoModeDetection enabled=\"true\"/>"
+        "<ViaProxy enabled=\"false\"/>"
+        "<BlockNonATypes enabled=\"false\"/>"
+        "<ExclusionList OnlyFromListMode=\"false\">%ComputerName%; localhost; *.local</ExclusionList>"
+        "<DnsUdpMode>0</DnsUdpMode>"
+        "</Resolve>"
+        "<Encryption mode=\"basic\"/>"
+        "<ConnectionLoopDetection enabled=\"true\" resolve=\"true\"/>"
+        "<Udp mode=\"mode_bypass\"/>"
+        "<LeakPreventionMode enabled=\"false\"/>"
+        "<ProcessOtherUsers enabled=\"false\"/>"
+        "<ProcessServices enabled=\"false\"/>"
+        "<HandleDirectConnections enabled=\"false\"/>"
+        "<HttpProxiesSupport enabled=\"false\"/>"
+        "</Options>"
+        "<ProxyList/>"
+        "<ChainList/>"
+        "<RuleList>"
+        "<Rule enabled=\"true\">"
+        "<Action type=\"Direct\"/>"
+        "<Targets>localhost; 127.0.0.1; %ComputerName%; ::1</Targets>"
+        "<Name>Localhost</Name>"
+        "</Rule>"
+        "<Rule enabled=\"true\">"
+        "<Action type=\"Direct\"/>"
+        "<Name>Default</Name>"
+        "</Rule>"
+        "</RuleList>"
+        "</ProxifierProfile>";
+    if (!doc.setContent(xmlTemplate)) {
+        doc.clear();
+    }
 
     return doc;
 }
@@ -1279,13 +1272,31 @@ void MainWindow::syncProxifierProfile()
         profileFile.close();
     }
 
-    if (!parsed) {
-        doc = createDefaultProxifierProfile();
-    }
-
     QDomElement root = doc.documentElement();
-    if (root.isNull() || root.tagName() != "ProxifierProfile") {
+    if (!parsed || root.isNull() || root.tagName() != "ProxifierProfile") {
         doc = createDefaultProxifierProfile();
+        root = doc.documentElement();
+    } else {
+        // Rebase to a known-good Proxifier schema and preserve sections from the existing profile.
+        QDomDocument sanitized = createDefaultProxifierProfile();
+        QDomElement sanitizedRoot = sanitized.documentElement();
+        auto copySection = [&](const QString& tagName) {
+            const QDomElement existing = root.firstChildElement(tagName);
+            if (existing.isNull()) {
+                return;
+            }
+            const QDomElement target = sanitizedRoot.firstChildElement(tagName);
+            const QDomNode imported = sanitized.importNode(existing, true);
+            if (target.isNull()) {
+                sanitizedRoot.appendChild(imported);
+            } else {
+                sanitizedRoot.replaceChild(imported, target);
+            }
+        };
+        copySection("ProxyList");
+        copySection("ChainList");
+        copySection("RuleList");
+        doc = sanitized;
         root = doc.documentElement();
     }
 
