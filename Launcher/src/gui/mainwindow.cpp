@@ -1196,7 +1196,10 @@ void MainWindow::updateAllGameforgeAccountVisuals()
 
 QString MainWindow::resolveProxifierProfilePath() const
 {
-    const QString appData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    QString appData = qEnvironmentVariable("APPDATA").trimmed();
+    if (appData.isEmpty()) {
+        appData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    }
     if (appData.isEmpty()) {
         return QString();
     }
@@ -1206,7 +1209,7 @@ QString MainWindow::resolveProxifierProfilePath() const
         profilesDir.mkpath(".");
     }
 
-    return profilesDir.filePath("gflessclient.ppx");
+    return profilesDir.filePath("GFLESSCLIENT.ppx");
 }
 
 QDomDocument MainWindow::createDefaultProxifierProfile() const
