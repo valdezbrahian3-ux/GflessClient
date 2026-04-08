@@ -1542,6 +1542,19 @@ void MainWindow::syncProxifierProfile()
     };
 
     bool wroteAny = false;
+    QString xmlText = doc.toString(1);
+    const QString forcedXmlDeclaration = QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+    if (xmlText.startsWith("<?xml")) {
+        const int declarationEnd = xmlText.indexOf("?>");
+        if (declarationEnd >= 0) {
+            xmlText = forcedXmlDeclaration + xmlText.mid(declarationEnd + 2);
+        } else {
+            xmlText.prepend(forcedXmlDeclaration + "\n");
+        }
+    } else {
+        xmlText.prepend(forcedXmlDeclaration + "\n");
+    }
+
     for (const QString& outputPath : outputPaths) {
         QFile outFile(outputPath);
         if (!outFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -1549,7 +1562,7 @@ void MainWindow::syncProxifierProfile()
         }
         QTextStream out(&outFile);
         out.setCodec("UTF-8");
-        out << doc.toString(1);
+        out << xmlText;
         outFile.close();
         wroteAny = true;
     }
