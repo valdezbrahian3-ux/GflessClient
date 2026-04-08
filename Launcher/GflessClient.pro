@@ -94,8 +94,11 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 win32 {
+    WINDEPLOYQT = $$shell_path($$[QT_INSTALL_BINS]/windeployqt.exe)
+    WINDEPLOYQT_CMD = \"$$WINDEPLOYQT\" --release --compiler-runtime \"$$OUT_PWD/release/$${TARGET}.exe\"
     OPENSSL_COPY_SCRIPT = $$shell_path($$PWD/scripts/copy-openssl.ps1)
     OPENSSL_COPY_CMD = powershell -NoProfile -ExecutionPolicy Bypass -File \"$$OPENSSL_COPY_SCRIPT\" -TargetDir \"$$OUT_PWD/release\" -SourceRoot \"$$PWD\"
+    QMAKE_POST_LINK += $$WINDEPLOYQT_CMD$$escape_expand(\n\t)
     QMAKE_POST_LINK += $$OPENSSL_COPY_CMD
 }
 
