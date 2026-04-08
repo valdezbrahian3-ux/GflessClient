@@ -1263,13 +1263,26 @@ void MainWindow::syncProxifierProfile()
         return;
     }
 
-    QDomDocument doc;
-    QFile profileFile(profilePath);
-    bool parsed = false;
+    const QFileInfo targetInfo(profilePath);
+    const QDir profileDir(targetInfo.absolutePath());
+    const QStringList candidatePaths = {
+        profilePath,
+        profileDir.filePath("gflessclient.ppx"),
+        profileDir.filePath("GFLESSDLL.ppx")
+    };
 
-    if (profileFile.exists() && profileFile.open(QIODevice::ReadOnly)) {
-        parsed = doc.setContent(&profileFile);
-        profileFile.close();
+    QDomDocument doc;
+    bool parsed = false;
+    for (const QString& candidate : candidatePaths) {
+        QFile inFile(candidate);
+        if (!inFile.exists() || !inFile.open(QIODevice::ReadOnly)) {
+            continue;
+        }
+        parsed = doc.setContent(&inFile);
+        inFile.close();
+        if (parsed) {
+            break;
+        }
     }
 
     QDomElement root = doc.documentElement();
@@ -1366,19 +1379,14 @@ void MainWindow::syncProxifierProfile()
             continue;
         }
 
-        const QString customPath = acc->getcustomClientPath().trimmed();
         const QString proxyIp = auth->getProxyIp().trimmed();
         const QString proxyPort = auth->getSocksPort().trimmed();
         const QString proxyUser = auth->getProxyUsername();
         const QString proxyPass = auth->getProxyPassword();
 
-        if (customPath.isEmpty() || proxyIp.isEmpty() || proxyPort.isEmpty()) {
+        if (proxyIp.isEmpty() || proxyPort.isEmpty()) {
             continue;
         }
-
-        const QString appPathNormalized = normalizedPath(customPath);
-        const QString appPathForRule = "\"" + QDir::toNativeSeparators(customPath) + "\"";
-        managedPaths.insert(appPathNormalized);
 
         const QString proxyKey = proxyIp + "|" + proxyPort + "|" + proxyUser + "|" + proxyPass;
         int proxyId = proxyKeyToId.value(proxyKey, -1);
@@ -1417,6 +1425,15 @@ void MainWindow::syncProxifierProfile()
             proxyList.appendChild(proxyNode);
             proxyKeyToId[proxyKey] = proxyId;
         }
+
+        const QString customPath = acc->getcustomClientPath().trimmed();
+        if (customPath.isEmpty()) {
+            continue;
+        }
+
+        const QString appPathNormalized = normalizedPath(customPath);
+        const QString appPathForRule = "\"" + QDir::toNativeSeparators(customPath) + "\"";
+        managedPaths.insert(appPathNormalized);
 
         QDomElement matchedRule;
         QList<QDomElement> duplicates;
@@ -1517,16 +1534,29 @@ void MainWindow::syncProxifierProfile()
         }
     }
 
-    QFileInfo profileInfo(profilePath);
-    QDir().mkpath(profileInfo.absolutePath());
-    if (!profileFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return;
+    QDir().mkpath(targetInfo.absolutePath());
+    const QStringList outputPaths = {
+        profilePath,
+        profileDir.filePath("gflessclient.ppx"),
+        profileDir.filePath("GFLESSDLL.ppx")
+    };
+
+    bool wroteAny = false;
+    for (const QString& outputPath : outputPaths) {
+        QFile outFile(outputPath);
+        if (!outFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            continue;
+        }
+        QTextStream out(&outFile);
+        out.setCodec("UTF-8");
+        out << doc.toString(1);
+        outFile.close();
+        wroteAny = true;
     }
 
-    QTextStream out(&profileFile);
-    out.setCodec("UTF-8");
-    out << doc.toString(1);
-    profileFile.close();
+    if (!wroteAny) {
+        return;
+    }
 }
 
 QString MainWindow::getAccountIpsJsonPath() const
