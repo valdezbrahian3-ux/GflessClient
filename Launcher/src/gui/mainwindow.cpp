@@ -599,43 +599,13 @@ void MainWindow::on_editGameforgeAccountButton_clicked()
         dialog.getCustomGamePath()
     );
 
-    bool proxyValidationOk = true;
-    if (dialog.getUseProxy()) {
-        bool captcha = false;
-        bool wrongCredentials = false;
-        QString gfChallengeId;
-
-        proxyValidationOk = acc->authenticate(captcha, gfChallengeId, wrongCredentials);
-
-        if (!proxyValidationOk && captcha) {
-            CaptchaDialog captchaDialog(gfChallengeId, acc->getAuth()->getNetworkManager(), this);
-            const int captchaRes = captchaDialog.exec();
-            if (captchaRes == QDialog::Accepted) {
-                captcha = false;
-                wrongCredentials = false;
-                gfChallengeId.clear();
-                proxyValidationOk = acc->authenticate(captcha, gfChallengeId, wrongCredentials);
-            }
-        }
-
-        if (!proxyValidationOk) {
-            if (wrongCredentials) {
-                QMessageBox::critical(this, "Error", "Incorrect username or password while validating proxy.");
-            } else {
-                QMessageBox::warning(this, "Proxy validation failed", "Proxy authentication failed. Account was set to no proxy.");
-            }
-
-            acc->setProxyConfig(false, "", "", "", "");
-        }
-    }
-
-    // Keep global mode behavior after editing and validation fallback.
+    // Keep global mode behavior after editing.
     acc->getAuth()->setForceNoProxy(!useProxiesGlobally);
 
     saveSettings();
     updateGameforgeAccountVisual(index);
-    if (proxyValidationOk && dialog.getUseProxy()) {
-        ui->statusbar->showMessage("Proxy validated successfully for " + acc->getEmail(), 8000);
+    if (dialog.getUseProxy()) {
+        ui->statusbar->showMessage("Proxy settings updated for " + acc->getEmail(), 8000);
     }
     on_gameforgeAccountComboBox_currentIndexChanged(index);
 }
