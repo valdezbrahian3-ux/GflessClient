@@ -8,7 +8,7 @@
 EditProxyDialog::EditProxyDialog(QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle("Edit proxy");
+    setWindowTitle("Edit account settings");
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
 
     useProxyCheckBox = new QCheckBox("Use SOCKS5 proxy", this);
@@ -16,6 +16,9 @@ EditProxyDialog::EditProxyDialog(QWidget* parent)
     socksPortLineEdit = new QLineEdit(this);
     proxyUsernameLineEdit = new QLineEdit(this);
     proxyPasswordLineEdit = new QLineEdit(this);
+    identityPathLineEdit = new QLineEdit(this);
+    customGamePathLineEdit = new QLineEdit(this);
+    installationIdLineEdit = new QLineEdit(this);
 
     proxyPasswordLineEdit->setEchoMode(QLineEdit::Password);
 
@@ -25,6 +28,9 @@ EditProxyDialog::EditProxyDialog(QWidget* parent)
     formLayout->addRow("Port:", socksPortLineEdit);
     formLayout->addRow("Username:", proxyUsernameLineEdit);
     formLayout->addRow("Password:", proxyPasswordLineEdit);
+    formLayout->addRow("Identity path (optional):", identityPathLineEdit);
+    formLayout->addRow("Custom game path (optional):", customGamePathLineEdit);
+    formLayout->addRow("Custom installation id (optional):", installationIdLineEdit);
 
     QDialogButtonBox* buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
@@ -49,7 +55,10 @@ void EditProxyDialog::setValues(
     const QString& ipValue,
     const QString& portValue,
     const QString& usernameValue,
-    const QString& passwordValue
+    const QString& passwordValue,
+    const QString& identityPathValue,
+    const QString& customGamePathValue,
+    const QString& installationIdValue
 )
 {
     useProxyCheckBox->setChecked(useProxyValue);
@@ -57,6 +66,9 @@ void EditProxyDialog::setValues(
     socksPortLineEdit->setText(portValue);
     proxyUsernameLineEdit->setText(usernameValue);
     proxyPasswordLineEdit->setText(passwordValue);
+    identityPathLineEdit->setText(identityPathValue);
+    customGamePathLineEdit->setText(customGamePathValue);
+    installationIdLineEdit->setText(installationIdValue);
     updateProxyFieldsEnabled(useProxyValue);
 }
 
@@ -83,6 +95,21 @@ QString EditProxyDialog::getProxyUsername() const
 QString EditProxyDialog::getProxyPassword() const
 {
     return proxyPasswordLineEdit->text();
+}
+
+QString EditProxyDialog::getIdentityPath() const
+{
+    return identityPathLineEdit->text();
+}
+
+QString EditProxyDialog::getCustomGamePath() const
+{
+    return customGamePathLineEdit->text();
+}
+
+QString EditProxyDialog::getInstallationId() const
+{
+    return installationIdLineEdit->text();
 }
 
 void EditProxyDialog::accept()

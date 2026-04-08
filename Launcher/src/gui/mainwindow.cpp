@@ -504,7 +504,10 @@ void MainWindow::on_editGameforgeAccountButton_clicked()
         auth->getProxyIp(),
         auth->getSocksPort(),
         auth->getProxyUsername(),
-        auth->getProxyPassword()
+        auth->getProxyPassword(),
+        acc->getIdentityPath(),
+        acc->getcustomClientPath(),
+        auth->getInstallationId()
     );
 
     if (dialog.exec() != QDialog::Accepted) {
@@ -517,6 +520,11 @@ void MainWindow::on_editGameforgeAccountButton_clicked()
         dialog.getSocksPort().trimmed(),
         dialog.getProxyUsername().trimmed(),
         dialog.getProxyPassword()
+    );
+    acc->setAdvancedConfig(
+        dialog.getIdentityPath(),
+        dialog.getInstallationId(),
+        dialog.getCustomGamePath()
     );
 
     // Keep global mode behavior after editing.
@@ -970,6 +978,12 @@ void MainWindow::on_gameforgeAccountComboBox_currentIndexChanged(int index)
         tooltipText += "\nCustom client: " + gf->getcustomClientPath().right(gf->getcustomClientPath().size() - gf->getcustomClientPath().lastIndexOf("/") - 1);
     }
 
+    tooltipText += "\nIdentity: ";
+    tooltipText += (gf->getIdentityPath().isEmpty() ? "default" : gf->getIdentityPath());
+
+    tooltipText += "\nInstallation ID: ";
+    tooltipText += (gf->getAuth()->getInstallationId().isEmpty() ? "default" : gf->getAuth()->getInstallationId());
+
     ui->gameforgeAccountComboBox->setToolTip(tooltipText);
 }
 
@@ -1026,7 +1040,7 @@ void MainWindow::setupProxyControls()
     connect(patchNewProxiesButton, &QToolButton::clicked, this, [&]() {
         int patched = patchNewProxiesFromJson();
         if (patched <= 0) {
-            QMessageBox::warning(this, "Patch new proxies", "No proxy entries were patched from accountIPS.json.");
+            QMessageBox::warning(this, "Patch new proxies", "No account entries were patched from accountIPS.json.");
             return;
         }
 
@@ -1071,14 +1085,6 @@ void MainWindow::writeAccountIpsJson() const
     for (const GameforgeAccount* acc : gfAccounts) {
         const NostaleAuth* auth = acc->getAuth();
 
-        if (!auth->getUseProxy()) {
-            continue;
-        }
-
-        if (auth->getProxyIp().trimmed().isEmpty()) {
-            continue;
-        }
-
         QJsonObject obj;
         obj["email"] = acc->getEmail();
         obj["use_proxy"] = auth->getUseProxy();
@@ -1086,6 +1092,11 @@ void MainWindow::writeAccountIpsJson() const
         obj["socks_port"] = auth->getSocksPort();
         obj["proxy_username"] = auth->getProxyUsername();
         obj["proxy_password"] = auth->getProxyPassword();
+        obj["identity_path"] = acc->getIdentityPath();
+        obj["custom_client"] = acc->getcustomClientPath();
+        obj["custom_game_path"] = acc->getcustomClientPath();
+        obj["installation_id"] = auth->getInstallationId();
+        obj["custom_installation_id"] = auth->getInstallationId();
         accounts.append(obj);
     }
 
@@ -1146,22 +1157,58 @@ int MainWindow::patchNewProxiesFromJson()
         }
 
         QJsonObject obj = byEmail.value(acc->getEmail());
-        const QString ip = obj.value("proxy_ip").toString().trimmed();
-        const QString port = obj.value("socks_port").toString().trimmed();
-        const QString user = obj.value("proxy_username").toString();
-        const QString pass = obj.value("proxy_password").toString();
+        NostaleAuth* auth = acc->getAuth();
 
-        bool useProxy = !ip.isEmpty();
-        const QJsonValue useProxyValue = obj.value("use_proxy");
-        if (useProxyValue.isBool()) {
-            useProxy = useProxyValue.toBool();
-        } else if (useProxyValue.isString()) {
-            const QString raw = useProxyValue.toString().trimmed().toLower();
-            if (!raw.isEmpty()) {
-                useProxy = (raw == "true" || raw == "1" || raw == "yes");
+        QString ip = auth->getProxyIp();
+        QString port = auth->getSocksPort();
+        QString user = auth->getProxyUsername();
+        QString pass = auth->getProxyPassword();
+        QString identityPath = acc->getIdentityPath();
+        QString installationId = auth->getInstallationId();
+        QString customClientPath = acc->getcustomClientPath();
+        bool useProxy = auth->getUseProxy();
+
+        if (obj.contains("proxy_ip")) {
+            ip = obj.value("proxy_ip").toString().trimmed();
+        }
+        if (obj.contains("socks_port")) {
+            port = obj.value("socks_port").toString().trimmed();
+        }
+        if (obj.contains("proxy_username")) {
+            user = obj.value("proxy_username").toString();
+        }
+        if (obj.contains("proxy_password")) {
+            pass = obj.value("proxy_password").toString();
+        }
+        if (obj.contains("identity_path")) {
+            identityPath = obj.value("identity_path").toString().trimmed();
+        }
+        if (obj.contains("installation_id")) {
+            installationId = obj.value("installation_id").toString().trimmed();
+        } else if (obj.contains("custom_installation_id")) {
+            installationId = obj.value("custom_installation_id").toString().trimmed();
+        }
+        if (obj.contains("custom_client")) {
+            customClientPath = obj.value("custom_client").toString().trimmed();
+        } else if (obj.contains("custom_game_path")) {
+            customClientPath = obj.value("custom_game_path").toString().trimmed();
+        }
+
+        if (obj.contains("use_proxy")) {
+            const QJsonValue useProxyValue = obj.value("use_proxy");
+            if (useProxyValue.isBool()) {
+                useProxy = useProxyValue.toBool();
+            } else if (useProxyValue.isString()) {
+                const QString raw = useProxyValue.toString().trimmed().toLower();
+                if (!raw.isEmpty()) {
+                    useProxy = (raw == "true" || raw == "1" || raw == "yes");
+                }
+            } else if (useProxyValue.isDouble()) {
+                useProxy = (useProxyValue.toInt() != 0);
             }
         }
 
+        acc->setAdvancedConfig(identityPath, installationId, customClientPath);
         acc->setProxyConfig(useProxy, ip, port, user, pass);
         acc->getAuth()->setForceNoProxy(!useProxiesGlobally);
         patched++;

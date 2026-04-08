@@ -55,6 +55,10 @@ public:
 
     void setForceNoProxy(bool forceNoProxyValue);
 
+    QString getIdentityPath() const;
+    void setIdentityPath(const QString& newIdentityPath);
+    void setInstallationId(const QString& newInstallationId);
+
     SyncNetworAccesskManager *getNetworkManager() const;
 
     bool createGameAccount(const QString& email, const QString& name, const QString& gfLang, QJsonObject& response) const;
@@ -134,8 +138,10 @@ private:
     QString proxyPassword;
     bool useProxy;
     bool forceNoProxy = false;
+    QString identityPath;
 
     void applyProxyConfiguration();
+    void rebuildIdentity();
 };
 
 #endif // NOSTALEAUTH_H

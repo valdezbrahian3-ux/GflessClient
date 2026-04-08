@@ -51,6 +51,12 @@ public:
         const QString& proxyPassword
     );
 
+    void setAdvancedConfig(
+        const QString& identPath,
+        const QString& installationId,
+        const QString& customGamePath
+    );
+
     QString getcustomClientPath() const;
 
 private:

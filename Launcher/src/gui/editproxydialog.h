@@ -17,7 +17,10 @@ public:
         const QString& ipValue,
         const QString& portValue,
         const QString& usernameValue,
-        const QString& passwordValue
+        const QString& passwordValue,
+        const QString& identityPathValue,
+        const QString& customGamePathValue,
+        const QString& installationIdValue
     );
 
     bool getUseProxy() const;
@@ -25,6 +28,9 @@ public:
     QString getSocksPort() const;
     QString getProxyUsername() const;
     QString getProxyPassword() const;
+    QString getIdentityPath() const;
+    QString getCustomGamePath() const;
+    QString getInstallationId() const;
 
 protected:
     void accept() override;
@@ -37,6 +43,9 @@ private:
     QLineEdit* socksPortLineEdit;
     QLineEdit* proxyUsernameLineEdit;
     QLineEdit* proxyPasswordLineEdit;
+    QLineEdit* identityPathLineEdit;
+    QLineEdit* customGamePathLineEdit;
+    QLineEdit* installationIdLineEdit;
 };
 
 #endif // EDITPROXYDIALOG_H

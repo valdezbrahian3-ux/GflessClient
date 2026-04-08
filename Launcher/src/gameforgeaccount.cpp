@@ -100,6 +100,18 @@ void GameforgeAccount::setProxyConfig(
     auth->setProxyConfig(proxyEnabled, proxyHost, proxyPort, proxyUsername, proxyPassword);
 }
 
+void GameforgeAccount::setAdvancedConfig(
+    const QString& identPath,
+    const QString& installationId,
+    const QString& customGamePath
+)
+{
+    identityPath = identPath.trimmed();
+    customClientPath = customGamePath.trimmed();
+    auth->setIdentityPath(identityPath);
+    auth->setInstallationId(installationId.trimmed());
+}
+
 QString GameforgeAccount::getcustomClientPath() const
 {
     return customClientPath;
