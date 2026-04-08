@@ -53,6 +53,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::loadSettings()
 {
+    loadingStoredAccounts = true;
     QSettings settings;
 
     settings.beginGroup("MainWindow");
@@ -93,10 +94,9 @@ void MainWindow::loadSettings()
         QString customClientPath = settings.value("custom_client", "").toString();
         bool useProxy = settings.value("use_proxy", false).toBool();
 
-        if (token.isEmpty())
-            addGameforgeAccount(email, password, identity, installationId, customClientPath, proxyIp, socksPort, proxyUsername, proxyPassword, useProxy);
-        else
-            addGameforgeAccount(email, password, token, identity, installationId, customClientPath, proxyIp, socksPort, proxyUsername, proxyPassword, useProxy);
+        // Always load persisted accounts without forcing online authentication at startup.
+        // This prevents account loss when auth/proxy fails or app closes during startup.
+        addGameforgeAccount(email, password, token, identity, installationId, customClientPath, proxyIp, socksPort, proxyUsername, proxyPassword, useProxy);
     }
 
     settings.endArray();
@@ -110,10 +110,15 @@ void MainWindow::loadSettings()
     syncProxifierProfile();
 #endif
     displayProfile(ui->profileComboBox->currentIndex());
+    loadingStoredAccounts = false;
 }
 
 void MainWindow::saveSettings()
 {
+    if (loadingStoredAccounts) {
+        return;
+    }
+
     QSettings settings;
 
     settings.beginGroup("MainWindow");
@@ -504,7 +509,9 @@ void MainWindow::createTrayIcon()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     hide();
-    saveSettings();
+    if (!loadingStoredAccounts) {
+        saveSettings();
+    }
     event->ignore();
 }
 

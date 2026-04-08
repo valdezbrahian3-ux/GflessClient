@@ -152,6 +152,7 @@ private:
     int defaultServer = 0;
     int defaultChannel = 0;
     int defaultCharacter = 0;
+    bool loadingStoredAccounts = false;
     bool useProxiesGlobally = true;
     QToolButton* toggleProxyModeButton = nullptr;
     QToolButton* patchNewProxiesButton = nullptr;
