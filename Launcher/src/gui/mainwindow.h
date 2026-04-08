@@ -127,6 +127,8 @@ private:
     void setupProxyControls();
     void applyGlobalProxyMode();
     void updateProxyModeButtonText();
+    void updateGameforgeAccountVisual(int index);
+    void updateAllGameforgeAccountVisuals();
     QString getAccountIpsJsonPath() const;
     void writeAccountIpsJson() const;
     int patchNewProxiesFromJson();

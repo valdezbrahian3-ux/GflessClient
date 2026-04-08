@@ -8,6 +8,8 @@
 #include "editproxydialog.h"
 #include "gameupdatedialog.h"
 #include "creategameaccountdialog.h"
+#include <QBrush>
+#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -87,14 +89,6 @@ void MainWindow::loadSettings()
         QString customClientPath = settings.value("custom_client", "").toString();
         bool useProxy = settings.value("use_proxy", false).toBool();
 
-#ifdef NO_PROXY_MODE
-        useProxy = false;
-        proxyIp.clear();
-        socksPort.clear();
-        proxyUsername.clear();
-        proxyPassword.clear();
-#endif
-
         if (token.isEmpty())
             addGameforgeAccount(email, password, identity, installationId, customClientPath, proxyIp, socksPort, proxyUsername, proxyPassword, useProxy);
         else
@@ -106,6 +100,7 @@ void MainWindow::loadSettings()
 
     applyGlobalProxyMode();
     updateProxyModeButtonText();
+    updateAllGameforgeAccountVisuals();
     writeAccountIpsJson();
     displayProfile(ui->profileComboBox->currentIndex());
 }
@@ -144,19 +139,11 @@ void MainWindow::saveSettings()
         settings.setValue("installation_id", acc->getAuth()->getInstallationId());
         settings.setValue("custom_client", acc->getcustomClientPath());
 
-#ifdef NO_PROXY_MODE
-        settings.setValue("use_proxy", false);
-        settings.setValue("proxy_ip", "");
-        settings.setValue("socks_port", "");
-        settings.setValue("proxy_username", "");
-        settings.setValue("proxy_password", "");
-#else
         settings.setValue("use_proxy", acc->getAuth()->getUseProxy());
         settings.setValue("proxy_ip", acc->getAuth()->getProxyIp());
         settings.setValue("socks_port", acc->getAuth()->getSocksPort());
         settings.setValue("proxy_username", acc->getAuth()->getProxyUsername());
         settings.setValue("proxy_password", acc->getAuth()->getProxyPassword());
-#endif
     }
 
     settings.endArray();
@@ -271,6 +258,8 @@ void MainWindow::addGameforgeAccount(const QString &email, const QString &passwo
     bool captcha = false;
     bool wrongCredentials = false;
     QString gfChallengeId;
+    bool authenticated = false;
+    bool switchedToNoProxy = false;
     GameforgeAccount* gfAcc = new GameforgeAccount(
         email,
         password,
@@ -286,7 +275,34 @@ void MainWindow::addGameforgeAccount(const QString &email, const QString &passwo
     );
     gfAcc->getAuth()->setForceNoProxy(!useProxiesGlobally);
 
-    if (!gfAcc->authenticate(captcha, gfChallengeId, wrongCredentials)) {
+    authenticated = gfAcc->authenticate(captcha, gfChallengeId, wrongCredentials);
+
+#ifdef NO_PROXY_MODE
+    // In NoIP build, only disable proxy for accounts that fail through proxy.
+    if (!authenticated && useProxy && !captcha && !wrongCredentials) {
+        gfAcc->setProxyConfig(false, "", "", "", "");
+        gfAcc->getAuth()->setForceNoProxy(!useProxiesGlobally);
+
+        bool retryCaptcha = false;
+        bool retryWrongCredentials = false;
+        QString retryChallengeId;
+        const bool retryAuthenticated = gfAcc->authenticate(retryCaptcha, retryChallengeId, retryWrongCredentials);
+
+        if (retryAuthenticated) {
+            authenticated = true;
+            switchedToNoProxy = true;
+        } else {
+            // Keep original proxy config if no-proxy retry did not solve it.
+            gfAcc->setProxyConfig(useProxy, proxyIp, socksPort, proxyUsername, proxyPassword);
+            gfAcc->getAuth()->setForceNoProxy(!useProxiesGlobally);
+            captcha = retryCaptcha;
+            wrongCredentials = retryWrongCredentials;
+            gfChallengeId = retryChallengeId;
+        }
+    }
+#endif
+
+    if (!authenticated) {
         if (captcha) {
             CaptchaDialog captcha(gfChallengeId, gfAcc->getAuth()->getNetworkManager(), this);
             int res = captcha.exec();
@@ -309,6 +325,14 @@ void MainWindow::addGameforgeAccount(const QString &email, const QString &passwo
     gfAccounts.push_back(gfAcc);
 
     ui->gameforgeAccountComboBox->addItem(email);
+    updateGameforgeAccountVisual(gfAccounts.size() - 1);
+
+    if (switchedToNoProxy) {
+        ui->statusbar->showMessage(
+            "Proxy failed for " + email + ". Account loaded with no proxy.",
+            12000
+        );
+    }
 
 
     // Update default profile
@@ -325,6 +349,7 @@ void MainWindow::addGameforgeAccount(const QString &email, const QString &passwo
 
 void MainWindow::addGameforgeAccount(const QString &email, const QString& password, const QString &token, const QString &identityPath, const QString &installationId, const QString &customClientPath, const QString &proxyIp, const QString &socksPort, const QString &proxyUsername, const QString &proxyPassword, const bool useProxy)
 {
+    bool switchedToNoProxy = false;
     GameforgeAccount* gfAcc = new GameforgeAccount(
         email,
         password,
@@ -342,14 +367,42 @@ void MainWindow::addGameforgeAccount(const QString &email, const QString& passwo
 
     gfAcc->setToken(token);
 
-    gfAccounts.push_back(gfAcc);
-
-    ui->gameforgeAccountComboBox->addItem(email);
-
-
     // Update default profile
     gfAcc->updateGameAccounts();
     QMap<QString, QString> gameAccs = gfAcc->getGameAccounts();
+
+#ifdef NO_PROXY_MODE
+    // In NoIP build, fallback to no proxy only when proxy path fails to load accounts.
+    if (useProxy && gameAccs.isEmpty()) {
+        gfAcc->setProxyConfig(false, "", "", "", "");
+        gfAcc->getAuth()->setForceNoProxy(!useProxiesGlobally);
+        gfAcc->updateGameAccounts();
+        QMap<QString, QString> fallbackAccounts = gfAcc->getGameAccounts();
+
+        if (!fallbackAccounts.isEmpty()) {
+            gameAccs = fallbackAccounts;
+            switchedToNoProxy = true;
+        } else {
+            // Keep original proxy config if no-proxy retry did not improve loading.
+            gfAcc->setProxyConfig(useProxy, proxyIp, socksPort, proxyUsername, proxyPassword);
+            gfAcc->getAuth()->setForceNoProxy(!useProxiesGlobally);
+            gfAcc->updateGameAccounts();
+            gameAccs = gfAcc->getGameAccounts();
+        }
+    }
+#endif
+
+    gfAccounts.push_back(gfAcc);
+
+    ui->gameforgeAccountComboBox->addItem(email);
+    updateGameforgeAccountVisual(gfAccounts.size() - 1);
+
+    if (switchedToNoProxy) {
+        ui->statusbar->showMessage(
+            "Proxy failed for " + email + ". Account loaded with no proxy.",
+            12000
+        );
+    }
 
     for (auto it = gameAccs.begin(); it != gameAccs.end(); ++it) {
         GameAccount gameAccount(gfAcc, it.value(), it.key(), it.value(), defaultServerLocation, defaultServer, defaultChannel, defaultCharacter, defaultAutoLogin);
@@ -394,6 +447,8 @@ void MainWindow::displayProfile(int index)
         QListWidgetItem* item = new QListWidgetItem(ui->accountsListWidget);
         item->setText(acc.toString());
         item->setData(Qt::UserRole, acc.getId());
+        const bool hasProxy = acc.getGfAcc()->getAuth()->getUseProxy();
+        item->setForeground(hasProxy ? QColor(0, 140, 0) : QColor(180, 30, 30));
     }
 }
 
@@ -531,6 +586,7 @@ void MainWindow::on_editGameforgeAccountButton_clicked()
     acc->getAuth()->setForceNoProxy(!useProxiesGlobally);
 
     saveSettings();
+    updateGameforgeAccountVisual(index);
     on_gameforgeAccountComboBox_currentIndexChanged(index);
 }
 
@@ -1073,6 +1129,24 @@ void MainWindow::updateProxyModeButtonText()
     toggleProxyModeButton->blockSignals(false);
 }
 
+void MainWindow::updateGameforgeAccountVisual(int index)
+{
+    if (index < 0 || index >= gfAccounts.size() || index >= ui->gameforgeAccountComboBox->count()) {
+        return;
+    }
+
+    const bool hasProxy = gfAccounts.at(index)->getAuth()->getUseProxy();
+    const QColor color = hasProxy ? QColor(0, 140, 0) : QColor(180, 30, 30);
+    ui->gameforgeAccountComboBox->setItemData(index, QBrush(color), Qt::ForegroundRole);
+}
+
+void MainWindow::updateAllGameforgeAccountVisuals()
+{
+    for (int i = 0; i < gfAccounts.size(); ++i) {
+        updateGameforgeAccountVisual(i);
+    }
+}
+
 QString MainWindow::getAccountIpsJsonPath() const
 {
     return QDir(QCoreApplication::applicationDirPath()).filePath("accountIPS.json");
@@ -1216,6 +1290,8 @@ int MainWindow::patchNewProxiesFromJson()
 
     if (patched > 0) {
         saveSettings();
+        updateAllGameforgeAccountVisuals();
+        displayProfile(ui->profileComboBox->currentIndex());
         on_gameforgeAccountComboBox_currentIndexChanged(ui->gameforgeAccountComboBox->currentIndex());
     }
 
