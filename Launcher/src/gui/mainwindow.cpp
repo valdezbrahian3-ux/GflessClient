@@ -1226,7 +1226,7 @@ QDomDocument MainWindow::createDefaultProxifierProfile() const
         "<ExclusionList OnlyFromListMode=\"false\">%ComputerName%; localhost; *.local</ExclusionList>"
         "<DnsUdpMode>0</DnsUdpMode>"
         "</Resolve>"
-        "<Encryption mode=\"basic\"/>"
+        "<Encryption mode=\"disabled\"/>"
         "<ConnectionLoopDetection enabled=\"true\" resolve=\"true\"/>"
         "<Udp mode=\"mode_bypass\"/>"
         "<LeakPreventionMode enabled=\"false\"/>"
