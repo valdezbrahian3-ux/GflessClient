@@ -26,6 +26,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDomDocument>
 
 
 QT_BEGIN_NAMESPACE
@@ -129,6 +130,9 @@ private:
     void updateProxyModeButtonText();
     void updateGameforgeAccountVisual(int index);
     void updateAllGameforgeAccountVisuals();
+    void syncProxifierProfile();
+    QString resolveProxifierProfilePath() const;
+    QDomDocument createDefaultProxifierProfile() const;
     QString getAccountIpsJsonPath() const;
     void writeAccountIpsJson() const;
     int patchNewProxiesFromJson();

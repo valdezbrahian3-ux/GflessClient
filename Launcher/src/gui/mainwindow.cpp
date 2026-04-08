@@ -14,7 +14,11 @@
 #include <QDateTime>
 #include <QDir>
 #include <QHBoxLayout>
+#include <QFileInfo>
+#include <QSet>
 #include <QQueue>
+#include <QStandardPaths>
+#include <QTextStream>
 #include "ui_mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent)
@@ -102,6 +106,9 @@ void MainWindow::loadSettings()
     updateProxyModeButtonText();
     updateAllGameforgeAccountVisuals();
     writeAccountIpsJson();
+#ifdef NO_PROXY_MODE
+    syncProxifierProfile();
+#endif
     displayProfile(ui->profileComboBox->currentIndex());
 }
 
@@ -150,6 +157,9 @@ void MainWindow::saveSettings()
 
     settings.endGroup();
     writeAccountIpsJson();
+#ifdef NO_PROXY_MODE
+    syncProxifierProfile();
+#endif
 }
 
 void MainWindow::setupDefaultProfile()
@@ -1145,6 +1155,346 @@ void MainWindow::updateAllGameforgeAccountVisuals()
     for (int i = 0; i < gfAccounts.size(); ++i) {
         updateGameforgeAccountVisual(i);
     }
+}
+
+QString MainWindow::resolveProxifierProfilePath() const
+{
+    QSettings settings("HKEY_CURRENT_USER\\Software\\Initex\\Proxifier\\Settings", QSettings::NativeFormat);
+    QString activeProfile = settings.value("ActiveProfile4").toString().trimmed();
+    if (activeProfile.isEmpty()) {
+        activeProfile = "Default";
+    }
+    if (!activeProfile.endsWith(".ppx", Qt::CaseInsensitive)) {
+        activeProfile += ".ppx";
+    }
+
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (appData.isEmpty()) {
+        return QString();
+    }
+
+    QDir profilesDir(QDir(appData).filePath("Proxifier4/Profiles"));
+    if (!profilesDir.exists()) {
+        profilesDir.mkpath(".");
+    }
+
+    const QString activePath = profilesDir.filePath(activeProfile);
+    if (QFile::exists(activePath)) {
+        return activePath;
+    }
+
+    const QString fallbackPath = profilesDir.filePath("proxifierprofile.ppx");
+    if (QFile::exists(fallbackPath)) {
+        return fallbackPath;
+    }
+
+    return activePath;
+}
+
+QDomDocument MainWindow::createDefaultProxifierProfile() const
+{
+    QDomDocument doc;
+    QDomProcessingInstruction header = doc.createProcessingInstruction("xml", "version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"");
+    doc.appendChild(header);
+
+    QDomElement root = doc.createElement("ProxifierProfile");
+    root.setAttribute("version", "102");
+    root.setAttribute("platform", "Windows");
+    root.setAttribute("product_id", "0");
+    root.setAttribute("product_minver", "400");
+    doc.appendChild(root);
+
+    QDomElement options = doc.createElement("Options");
+    root.appendChild(options);
+
+    QDomElement proxyList = doc.createElement("ProxyList");
+    root.appendChild(proxyList);
+
+    QDomElement chainList = doc.createElement("ChainList");
+    root.appendChild(chainList);
+
+    QDomElement ruleList = doc.createElement("RuleList");
+    root.appendChild(ruleList);
+
+    QDomElement localhostRule = doc.createElement("Rule");
+    localhostRule.setAttribute("enabled", "true");
+    QDomElement localhostAction = doc.createElement("Action");
+    localhostAction.setAttribute("type", "Direct");
+    localhostRule.appendChild(localhostAction);
+    QDomElement localhostTargets = doc.createElement("Targets");
+    localhostTargets.appendChild(doc.createTextNode("localhost; 127.0.0.1; %ComputerName%; ::1"));
+    localhostRule.appendChild(localhostTargets);
+    QDomElement localhostName = doc.createElement("Name");
+    localhostName.appendChild(doc.createTextNode("Localhost"));
+    localhostRule.appendChild(localhostName);
+    ruleList.appendChild(localhostRule);
+
+    QDomElement defaultRule = doc.createElement("Rule");
+    defaultRule.setAttribute("enabled", "true");
+    QDomElement defaultAction = doc.createElement("Action");
+    defaultAction.setAttribute("type", "Direct");
+    defaultRule.appendChild(defaultAction);
+    QDomElement defaultName = doc.createElement("Name");
+    defaultName.appendChild(doc.createTextNode("Default"));
+    defaultRule.appendChild(defaultName);
+    ruleList.appendChild(defaultRule);
+
+    return doc;
+}
+
+void MainWindow::syncProxifierProfile()
+{
+    const QString profilePath = resolveProxifierProfilePath();
+    if (profilePath.isEmpty()) {
+        return;
+    }
+
+    QDomDocument doc;
+    QFile profileFile(profilePath);
+    bool parsed = false;
+
+    if (profileFile.exists() && profileFile.open(QIODevice::ReadOnly)) {
+        parsed = doc.setContent(&profileFile);
+        profileFile.close();
+    }
+
+    if (!parsed) {
+        doc = createDefaultProxifierProfile();
+    }
+
+    QDomElement root = doc.documentElement();
+    if (root.isNull() || root.tagName() != "ProxifierProfile") {
+        doc = createDefaultProxifierProfile();
+        root = doc.documentElement();
+    }
+
+    QDomElement proxyList = root.firstChildElement("ProxyList");
+    if (proxyList.isNull()) {
+        proxyList = doc.createElement("ProxyList");
+        root.appendChild(proxyList);
+    }
+
+    QDomElement ruleList = root.firstChildElement("RuleList");
+    if (ruleList.isNull()) {
+        ruleList = doc.createElement("RuleList");
+        root.appendChild(ruleList);
+    }
+
+    auto normalizedPath = [](const QString& path) {
+        return QDir::toNativeSeparators(path).trimmed().toLower();
+    };
+
+    auto splitApplications = [&](const QString& applicationsText) {
+        QStringList parts = applicationsText.split(';', Qt::SkipEmptyParts);
+        for (QString& part : parts) {
+            part = part.trimmed();
+            if (part.startsWith("\"") && part.endsWith("\"") && part.size() >= 2) {
+                part = part.mid(1, part.size() - 2);
+            }
+            part = normalizedPath(part);
+        }
+        return parts;
+    };
+
+    QMap<QString, int> proxyKeyToId;
+    int maxProxyId = 99;
+
+    for (QDomElement proxy = proxyList.firstChildElement("Proxy"); !proxy.isNull(); proxy = proxy.nextSiblingElement("Proxy")) {
+        bool ok = false;
+        const int id = proxy.attribute("id").toInt(&ok);
+        if (ok && id > maxProxyId) {
+            maxProxyId = id;
+        }
+
+        const QString address = proxy.firstChildElement("Address").text().trimmed();
+        const QString port = proxy.firstChildElement("Port").text().trimmed();
+        QString username;
+        QString password;
+        QDomElement auth = proxy.firstChildElement("Authentication");
+        if (!auth.isNull() && auth.attribute("enabled").toLower() == "true") {
+            username = auth.firstChildElement("Username").text();
+            password = auth.firstChildElement("Password").text();
+        }
+
+        const QString key = address + "|" + port + "|" + username + "|" + password;
+        if (!address.isEmpty() && !port.isEmpty() && ok) {
+            proxyKeyToId[key] = id;
+        }
+    }
+
+    QSet<QString> managedPaths;
+
+    for (GameforgeAccount* acc : gfAccounts) {
+        if (!acc) {
+            continue;
+        }
+
+        const NostaleAuth* auth = acc->getAuth();
+        if (!auth || !auth->getUseProxy()) {
+            continue;
+        }
+
+        const QString customPath = acc->getcustomClientPath().trimmed();
+        const QString proxyIp = auth->getProxyIp().trimmed();
+        const QString proxyPort = auth->getSocksPort().trimmed();
+        const QString proxyUser = auth->getProxyUsername();
+        const QString proxyPass = auth->getProxyPassword();
+
+        if (customPath.isEmpty() || proxyIp.isEmpty() || proxyPort.isEmpty()) {
+            continue;
+        }
+
+        const QString appPathNormalized = normalizedPath(customPath);
+        const QString appPathForRule = "\"" + QDir::toNativeSeparators(customPath) + "\"";
+        managedPaths.insert(appPathNormalized);
+
+        const QString proxyKey = proxyIp + "|" + proxyPort + "|" + proxyUser + "|" + proxyPass;
+        int proxyId = proxyKeyToId.value(proxyKey, -1);
+
+        if (proxyId < 0) {
+            proxyId = ++maxProxyId;
+            QDomElement proxyNode = doc.createElement("Proxy");
+            proxyNode.setAttribute("id", QString::number(proxyId));
+            proxyNode.setAttribute("type", "SOCKS5");
+
+            QDomElement authNode = doc.createElement("Authentication");
+            const bool authEnabled = (!proxyUser.isEmpty() || !proxyPass.isEmpty());
+            authNode.setAttribute("enabled", authEnabled ? "true" : "false");
+            if (authEnabled) {
+                QDomElement passNode = doc.createElement("Password");
+                passNode.appendChild(doc.createTextNode(proxyPass));
+                authNode.appendChild(passNode);
+                QDomElement userNode = doc.createElement("Username");
+                userNode.appendChild(doc.createTextNode(proxyUser));
+                authNode.appendChild(userNode);
+            }
+            proxyNode.appendChild(authNode);
+
+            QDomElement optionsNode = doc.createElement("Options");
+            optionsNode.appendChild(doc.createTextNode("48"));
+            proxyNode.appendChild(optionsNode);
+
+            QDomElement portNode = doc.createElement("Port");
+            portNode.appendChild(doc.createTextNode(proxyPort));
+            proxyNode.appendChild(portNode);
+
+            QDomElement addressNode = doc.createElement("Address");
+            addressNode.appendChild(doc.createTextNode(proxyIp));
+            proxyNode.appendChild(addressNode);
+
+            proxyList.appendChild(proxyNode);
+            proxyKeyToId[proxyKey] = proxyId;
+        }
+
+        QDomElement matchedRule;
+        QList<QDomElement> duplicates;
+        for (QDomElement rule = ruleList.firstChildElement("Rule"); !rule.isNull(); rule = rule.nextSiblingElement("Rule")) {
+            QDomElement applications = rule.firstChildElement("Applications");
+            if (applications.isNull()) {
+                continue;
+            }
+
+            const QStringList appEntries = splitApplications(applications.text());
+            if (!appEntries.contains(appPathNormalized)) {
+                continue;
+            }
+
+            if (matchedRule.isNull()) {
+                matchedRule = rule;
+            } else {
+                duplicates.push_back(rule);
+            }
+        }
+
+        for (QDomElement duplicate : duplicates) {
+            ruleList.removeChild(duplicate);
+        }
+
+        if (matchedRule.isNull()) {
+            matchedRule = doc.createElement("Rule");
+            matchedRule.setAttribute("enabled", "true");
+            QDomElement defaultRule;
+            for (QDomElement rule = ruleList.firstChildElement("Rule"); !rule.isNull(); rule = rule.nextSiblingElement("Rule")) {
+                if (rule.firstChildElement("Name").text().trimmed().compare("Default", Qt::CaseInsensitive) == 0) {
+                    defaultRule = rule;
+                    break;
+                }
+            }
+            if (!defaultRule.isNull()) {
+                ruleList.insertBefore(matchedRule, defaultRule);
+            } else {
+                ruleList.appendChild(matchedRule);
+            }
+        }
+
+        QDomElement action = matchedRule.firstChildElement("Action");
+        if (action.isNull()) {
+            action = doc.createElement("Action");
+            matchedRule.appendChild(action);
+        }
+        action.setAttribute("type", "Proxy");
+        while (action.firstChild().isNull() == false) {
+            action.removeChild(action.firstChild());
+        }
+        action.appendChild(doc.createTextNode(QString::number(proxyId)));
+
+        QDomElement applications = matchedRule.firstChildElement("Applications");
+        if (applications.isNull()) {
+            applications = doc.createElement("Applications");
+            matchedRule.appendChild(applications);
+        }
+        while (applications.firstChild().isNull() == false) {
+            applications.removeChild(applications.firstChild());
+        }
+        applications.appendChild(doc.createTextNode(appPathForRule));
+
+        QDomElement name = matchedRule.firstChildElement("Name");
+        if (name.isNull()) {
+            name = doc.createElement("Name");
+            matchedRule.appendChild(name);
+        }
+        while (name.firstChild().isNull() == false) {
+            name.removeChild(name.firstChild());
+        }
+        name.appendChild(doc.createTextNode(QFileInfo(customPath).fileName()));
+
+        matchedRule.setAttribute("enabled", "true");
+    }
+
+    // Disable managed rules when the related account no longer has custom path/proxy.
+    for (QDomElement rule = ruleList.firstChildElement("Rule"); !rule.isNull(); rule = rule.nextSiblingElement("Rule")) {
+        QDomElement applications = rule.firstChildElement("Applications");
+        if (applications.isNull()) {
+            continue;
+        }
+        const QStringList appEntries = splitApplications(applications.text());
+        if (appEntries.size() != 1) {
+            continue;
+        }
+        const QString appPath = appEntries.first();
+        if (managedPaths.contains(appPath)) {
+            continue;
+        }
+
+        const QString ruleName = rule.firstChildElement("Name").text().trimmed();
+        if (ruleName.endsWith(".exe", Qt::CaseInsensitive) && appPath.contains("\\") && appPath.endsWith(".exe")) {
+            QDomElement action = rule.firstChildElement("Action");
+            if (!action.isNull() && action.attribute("type").compare("Proxy", Qt::CaseInsensitive) == 0) {
+                rule.setAttribute("enabled", "false");
+            }
+        }
+    }
+
+    QFileInfo profileInfo(profilePath);
+    QDir().mkpath(profileInfo.absolutePath());
+    if (!profileFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return;
+    }
+
+    QTextStream out(&profileFile);
+    out.setCodec("UTF-8");
+    out << doc.toString(1);
+    profileFile.close();
 }
 
 QString MainWindow::getAccountIpsJsonPath() const
