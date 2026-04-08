@@ -1138,8 +1138,12 @@ void MainWindow::setupProxyControls()
 
     connect(patchNewProxiesButton, &QToolButton::clicked, this, [&]() {
         int patched = patchNewProxiesFromJson();
+#ifdef NO_PROXY_MODE
+        // Always refresh Proxifier profile on explicit patch action.
+        syncProxifierProfile();
+#endif
         if (patched <= 0) {
-            QMessageBox::warning(this, "Patch new proxies", "No account entries were patched from accountIPS.json.");
+            QMessageBox::information(this, "Patch new proxies", "No account entries were patched from accountIPS.json.\nProxifier profile was still refreshed.");
             return;
         }
 
@@ -1202,7 +1206,7 @@ QString MainWindow::resolveProxifierProfilePath() const
         profilesDir.mkpath(".");
     }
 
-    return profilesDir.filePath("GFLESSDLL.ppx");
+    return profilesDir.filePath("gflessclient.ppx");
 }
 
 QDomDocument MainWindow::createDefaultProxifierProfile() const
