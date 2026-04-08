@@ -1137,6 +1137,8 @@ void MainWindow::setupProxyControls()
     });
 
     connect(patchNewProxiesButton, &QToolButton::clicked, this, [&]() {
+        // Persist current UI/account state to registry and JSON before patching.
+        saveSettings();
         int patched = patchNewProxiesFromJson();
 #ifdef NO_PROXY_MODE
         // Always refresh Proxifier profile on explicit patch action.
@@ -1367,7 +1369,41 @@ void MainWindow::syncProxifierProfile()
         }
     }
 
-    QSet<QString> managedPaths;
+    struct ProxyAccountEntry {
+        QString customPath;
+        QString proxyIp;
+        QString proxyPort;
+        QString proxyUser;
+        QString proxyPass;
+    };
+
+    QVector<ProxyAccountEntry> patchEntries;
+    auto addPatchEntry = [&](const QString& customPathRaw,
+                             const QString& proxyIpRaw,
+                             const QString& proxyPortRaw,
+                             const QString& proxyUserRaw,
+                             const QString& proxyPassRaw,
+                             bool useProxy) {
+        if (!useProxy) {
+            return;
+        }
+
+        QString customPath = customPathRaw.trimmed();
+        QString proxyIp = proxyIpRaw.trimmed();
+        QString proxyPort = proxyPortRaw.trimmed();
+        QString proxyUser = proxyUserRaw.trimmed();
+        QString proxyPass = proxyPassRaw;
+
+        if (customPath.startsWith("\"") && customPath.endsWith("\"") && customPath.size() >= 2) {
+            customPath = customPath.mid(1, customPath.size() - 2).trimmed();
+        }
+
+        if (proxyIp.isEmpty() || proxyPort.isEmpty()) {
+            return;
+        }
+
+        patchEntries.push_back({customPath, proxyIp, proxyPort, proxyUser, proxyPass});
+    };
 
     for (GameforgeAccount* acc : gfAccounts) {
         if (!acc) {
@@ -1375,18 +1411,47 @@ void MainWindow::syncProxifierProfile()
         }
 
         const NostaleAuth* auth = acc->getAuth();
-        if (!auth || !auth->getUseProxy()) {
+        if (!auth) {
             continue;
         }
 
-        const QString proxyIp = auth->getProxyIp().trimmed();
-        const QString proxyPort = auth->getSocksPort().trimmed();
-        const QString proxyUser = auth->getProxyUsername();
-        const QString proxyPass = auth->getProxyPassword();
+        addPatchEntry(
+            acc->getcustomClientPath(),
+            auth->getProxyIp(),
+            auth->getSocksPort(),
+            auth->getProxyUsername(),
+            auth->getProxyPassword(),
+            auth->getUseProxy()
+        );
+    }
 
-        if (proxyIp.isEmpty() || proxyPort.isEmpty()) {
-            continue;
+    // Merge with persisted accounts from registry to avoid losing rules/proxies that are not currently loaded in memory.
+    {
+        QSettings settings;
+        settings.beginGroup("Gameforge Accounts");
+        const int numAccs = settings.beginReadArray("GF accounts data");
+        for (int i = 0; i < numAccs; ++i) {
+            settings.setArrayIndex(i);
+            addPatchEntry(
+                settings.value("custom_client", "").toString(),
+                settings.value("proxy_ip", "").toString(),
+                settings.value("socks_port", "").toString(),
+                settings.value("proxy_username", "").toString(),
+                settings.value("proxy_password", "").toString(),
+                settings.value("use_proxy", false).toBool()
+            );
         }
+        settings.endArray();
+        settings.endGroup();
+    }
+
+    QSet<QString> managedPaths;
+
+    for (const ProxyAccountEntry& entry : patchEntries) {
+        const QString proxyIp = entry.proxyIp;
+        const QString proxyPort = entry.proxyPort;
+        const QString proxyUser = entry.proxyUser;
+        const QString proxyPass = entry.proxyPass;
 
         const QString proxyKey = proxyIp + "|" + proxyPort + "|" + proxyUser + "|" + proxyPass;
         int proxyId = proxyKeyToId.value(proxyKey, -1);
@@ -1426,7 +1491,7 @@ void MainWindow::syncProxifierProfile()
             proxyKeyToId[proxyKey] = proxyId;
         }
 
-        const QString customPath = acc->getcustomClientPath().trimmed();
+        const QString customPath = entry.customPath;
         if (customPath.isEmpty()) {
             continue;
         }
