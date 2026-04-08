@@ -1,8 +1,12 @@
 #include "editproxydialog.h"
 
+#include <QDir>
+#include <QFileDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 EditProxyDialog::EditProxyDialog(QWidget* parent)
@@ -28,8 +32,18 @@ EditProxyDialog::EditProxyDialog(QWidget* parent)
     formLayout->addRow("Port:", socksPortLineEdit);
     formLayout->addRow("Username:", proxyUsernameLineEdit);
     formLayout->addRow("Password:", proxyPasswordLineEdit);
+    QWidget* customGamePathWidget = new QWidget(this);
+    QHBoxLayout* customGamePathLayout = new QHBoxLayout(customGamePathWidget);
+    customGamePathLayout->setContentsMargins(0, 0, 0, 0);
+    customGamePathLayout->setSpacing(6);
+    QPushButton* browseCustomGamePathButton = new QPushButton("...", customGamePathWidget);
+    browseCustomGamePathButton->setToolTip("Select custom game client (.exe)");
+    browseCustomGamePathButton->setFixedWidth(32);
+    customGamePathLayout->addWidget(customGamePathLineEdit);
+    customGamePathLayout->addWidget(browseCustomGamePathButton);
+
     formLayout->addRow("Identity path (optional):", identityPathLineEdit);
-    formLayout->addRow("Custom game path (optional):", customGamePathLineEdit);
+    formLayout->addRow("Custom game path (optional):", customGamePathWidget);
     formLayout->addRow("Custom installation id (optional):", installationIdLineEdit);
 
     QDialogButtonBox* buttonBox = new QDialogButtonBox(
@@ -44,6 +58,18 @@ EditProxyDialog::EditProxyDialog(QWidget* parent)
     setLayout(mainLayout);
 
     connect(useProxyCheckBox, &QCheckBox::toggled, this, &EditProxyDialog::updateProxyFieldsEnabled);
+    connect(browseCustomGamePathButton, &QPushButton::clicked, this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(
+            this,
+            "Select custom game client",
+            QDir::rootPath(),
+            "(*.exe)"
+        );
+
+        if (!path.isEmpty()) {
+            customGamePathLineEdit->setText(path);
+        }
+    });
     connect(buttonBox, &QDialogButtonBox::accepted, this, &EditProxyDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &EditProxyDialog::reject);
 
