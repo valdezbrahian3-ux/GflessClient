@@ -1159,15 +1159,6 @@ void MainWindow::updateAllGameforgeAccountVisuals()
 
 QString MainWindow::resolveProxifierProfilePath() const
 {
-    QSettings settings("HKEY_CURRENT_USER\\Software\\Initex\\Proxifier\\Settings", QSettings::NativeFormat);
-    QString activeProfile = settings.value("ActiveProfile4").toString().trimmed();
-    if (activeProfile.isEmpty()) {
-        activeProfile = "Default";
-    }
-    if (!activeProfile.endsWith(".ppx", Qt::CaseInsensitive)) {
-        activeProfile += ".ppx";
-    }
-
     const QString appData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     if (appData.isEmpty()) {
         return QString();
@@ -1178,17 +1169,7 @@ QString MainWindow::resolveProxifierProfilePath() const
         profilesDir.mkpath(".");
     }
 
-    const QString activePath = profilesDir.filePath(activeProfile);
-    if (QFile::exists(activePath)) {
-        return activePath;
-    }
-
-    const QString fallbackPath = profilesDir.filePath("proxifierprofile.ppx");
-    if (QFile::exists(fallbackPath)) {
-        return fallbackPath;
-    }
-
-    return activePath;
+    return profilesDir.filePath("GFLESSDLL.ppx");
 }
 
 QDomDocument MainWindow::createDefaultProxifierProfile() const
