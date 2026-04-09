@@ -47,3 +47,6 @@ You'll need to extract a valid blackbox from the request to auth/iovation follow
 
 Big thanks and full credits to [morsisko](https://github.com/morsisko) and [stdLemon](https://github.com/stdLemon) for all the reverse engineering needed to make this project possible.<br>
 Repositories used for this project: [Nostale-Auth](https://github.com/morsisko/NosTale-Auth), [Nostale-Gfless](https://github.com/morsisko/NosTale-Gfless) and [nostale-auth](https://github.com/stdLemon/nostale-auth)
+
+---
+*Modificaciones realizadas por Calamardo para la optimización del software.*
