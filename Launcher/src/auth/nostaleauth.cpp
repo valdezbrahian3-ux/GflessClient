@@ -740,10 +740,13 @@ bool NostaleAuth::createGameAccount(const QString &email, const QString& name, c
     request.setRawHeader("Connection", "Keep-Alive");
     request.setRawHeader("Authorization", "Bearer " + token.toUtf8());
 
-    identity->update();
-    BlackBox blackbox(identity, QJsonValue::Null);
-
-    content["blackbox"] = blackbox.encoded();
+    if (identity == nullptr) {
+        content["blackbox"] = BlackboxGenerator::generate();
+    } else {
+        identity->update();
+        BlackBox blackbox(identity, QJsonValue::Null);
+        content["blackbox"] = blackbox.encoded();
+    }
     content["displayName"] = name;
     //content["email"] = email;
     content["gameEnvironmentId"] = "732876de-012f-4e8d-a501-2e0816cf22f2";
