@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>393</width>
-    <height>231</height>
+    <height>260</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -158,6 +158,19 @@
     <widget class="QCheckBox" name="confirmRemoveAccountCheckbox">
      <property name="text">
       <string>Ask for confirmation before removing an account</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="retryIovationCheckbox">
+     <property name="toolTip">
+      <string>If auth/iovation returns forbidden, retry the same account up to 3 times (1s between attempts) before continuing</string>
+     </property>
+     <property name="text">
+      <string>Retry login up to 3 times if there are iovation problems</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
      </property>
     </widget>
    </item>

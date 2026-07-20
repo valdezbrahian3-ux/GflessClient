@@ -185,58 +185,62 @@ bool NostaleAuth::authenticate(const QString &email, const QString &password, bo
     return true;
 }
 
-QString NostaleAuth::getToken(const QString &accountId)
+QString NostaleAuth::getToken(const QString &accountId, int maxAttempts)
 {
-    if (token.isEmpty()) {
-        lastError = "Missing auth token. Re-add the Gameforge account.";
-        return {};
+    if (maxAttempts < 1) {
+        maxAttempts = 1;
     }
 
-    // Space out rapid token requests on the same Gameforge session (same mail / identity).
-    // Upstream now sends a real blackbox, so GF can reject bursts per accountId with 403.
-    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-    if (lastTokenRequestMs > 0) {
-        const qint64 elapsedMs = nowMs - lastTokenRequestMs;
-        const qint64 minGapMs = 3000;
-        if (elapsedMs < minGapMs) {
-            QThread::msleep(static_cast<unsigned long>(minGapMs - elapsedMs));
-        }
-    }
+    QString code;
 
-    lastError.clear();
+    for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+        lastError.clear();
 
-    for (int attempt = 0; attempt < 3; ++attempt) {
-        if (attempt > 0) {
-            // Reload identity from disk (upstream fix) + pause before retrying a forbidden/failed iovation.
-            refreshIdentity();
-            QThread::sleep(2);
+        // Suppress error popups until the last attempt (e.g. iovation forbidden).
+        networkManager->setErrorPopupsEnabled(attempt == maxAttempts);
+
+        if (token.isEmpty()) {
+            lastError = "Missing auth token. Re-add the Gameforge account.";
+            break;
         }
+
+        if (attempt > 1) {
+            qDebug() << "getToken retry" << attempt << "/" << maxAttempts << "for account" << accountId;
+        }
+
+        // Fresh identity + forced vector rotation, then wait so the blackbox is not "too fresh".
+        prepareIdentityForIovation();
 
         generateGameSessionId();
-        lastTokenRequestMs = QDateTime::currentMSecsSinceEpoch();
 
         if (!sendIovation(accountId)) {
-            continue;
+            if (lastError.isEmpty()) {
+                lastError = "auth/iovation failed for account " + accountId;
+            }
+            if (attempt < maxAttempts) {
+                continue;
+            }
+            break;
         }
 
         // This sleep is a MUST, otherwise the request to thin/codes will fail
         // Qt 5.15: sleep(unsigned long secs). Qt 6 chrono overload is not available here.
         QThread::sleep(1);
 
-        const QString code = sendThinCodes(accountId);
-        if (!code.isEmpty()) {
-            lastError.clear();
-            return code;
+        code = sendThinCodes(accountId);
+        if (code.isEmpty()) {
+            lastError = "thin/codes failed for account " + accountId;
+            if (attempt < maxAttempts) {
+                continue;
+            }
+            break;
         }
 
-        lastError = "thin/codes failed for account " + accountId;
+        break;
     }
 
-    if (lastError.isEmpty()) {
-        lastError = "auth/iovation failed for account " + accountId;
-    }
-
-    return {};
+    networkManager->setErrorPopupsEnabled(true);
+    return code;
 }
 
 QChar NostaleAuth::getFirstNumber(QString uuid)
@@ -712,6 +716,20 @@ void NostaleAuth::refreshIdentity()
     if (identity) {
         identity->loadFromDisk();
     }
+}
+
+void NostaleAuth::prepareIdentityForIovation()
+{
+    if (!identity) {
+        return;
+    }
+
+    // Reload from disk so we do not accumulate a bad in-memory fingerprint.
+    identity->loadFromDisk();
+    identity->prepareForAuth();
+
+    // Age the fingerprint: GF often rejects iovation when the vector looks too "same-second".
+    QThread::sleep(1);
 }
 
 void NostaleAuth::setToken(const QString &newToken)

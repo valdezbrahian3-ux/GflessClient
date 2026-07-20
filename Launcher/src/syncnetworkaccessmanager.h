@@ -12,11 +12,19 @@ class SyncNetworAccesskManager : public QNetworkAccessManager
 public:
     explicit SyncNetworAccesskManager(QObject *parent = nullptr);
 
+    void setErrorPopupsEnabled(bool enabled);
+    bool errorPopupsEnabled() const;
+
     QNetworkReply* post(const QNetworkRequest& request, const QByteArray& data);
 
     QNetworkReply* get(const QNetworkRequest& request);
 
     QNetworkReply* sendCustomRequest(const QNetworkRequest &request, const QByteArray &verb, QIODevice *data = nullptr);
+
+private:
+    bool showErrorPopups = true;
+
+    void connectErrorPopup(QNetworkReply* reply);
 };
 
 #endif // SYNCNETWORKACCESSMANAGER_H

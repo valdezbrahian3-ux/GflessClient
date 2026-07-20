@@ -52,6 +52,10 @@ public:
 
     bool getConfirmRemoveAccount() const;
 
+    void setRetryIovation(bool b);
+
+    bool getRetryIovation() const;
+
 signals:
     void profilesPathSelected(QString);
 

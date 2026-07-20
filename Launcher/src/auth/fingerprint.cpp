@@ -40,6 +40,18 @@ void Fingerprint::updateVector()
     fingerprint["vector"] = QString(newVector.toBase64());
 }
 
+void Fingerprint::forceRotateVector()
+{
+    qint64 current_time_in_ms = QDateTime::currentMSecsSinceEpoch();
+    QByteArray content = QByteArray::fromBase64(fingerprint["vector"].toString().toLocal8Bit());
+    int last_blank_index = content.lastIndexOf(' ');
+    content = content.left(last_blank_index);
+    content = content.mid(1) + randomAsciiCharacter();
+
+    QByteArray newVector = content + " " + QString::number(current_time_in_ms).toLocal8Bit();
+    fingerprint["vector"] = QString(newVector.toBase64());
+}
+
 
 void Fingerprint::updateCreation()
 {

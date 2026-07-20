@@ -25,6 +25,15 @@ void Identity::update()
     save();
 }
 
+void Identity::prepareForAuth()
+{
+    fingerprint.updateServerTime();
+    fingerprint.forceRotateVector();
+    fingerprint.updateCreation();
+    fingerprint.updateTimings();
+    save();
+}
+
 Fingerprint Identity::getFingerprint() const
 {
     return fingerprint;

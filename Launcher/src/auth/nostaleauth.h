@@ -34,7 +34,7 @@ public:
 
     bool authenticate(const QString& email, const QString& password, bool &captcha, QString &gfChallengeId, bool& wrongCredentials);
 
-    QString getToken(const QString& accountId);
+    QString getToken(const QString& accountId, int maxAttempts = 1);
 
     QString getProxyIp() const;
     QString getSocksPort() const;
@@ -99,6 +99,9 @@ private:
 
     bool sendIovationOptions();
 
+    // Force a fresh fingerprint (rotated vector) and age it ~1s before iovation.
+    void prepareIdentityForIovation();
+
     void initInstallationId();
 
     void initCert();
@@ -146,7 +149,6 @@ private:
     bool forceNoProxy = false;
     QString identityPath;
     QString lastError;
-    qint64 lastTokenRequestMs = 0;
 
     void applyProxyConfiguration();
     void rebuildIdentity();

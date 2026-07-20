@@ -70,6 +70,7 @@ void MainWindow::loadSettings()
     settingsDialog->setDisabledNosmall(settings.value("disable_nosmall", false).toBool());
     settingsDialog->setCheckUpdates(settings.value("check_updates", true).toBool());
     settingsDialog->setConfirmRemoveAccount(settings.value("confirm_remove_account", true).toBool());
+    settingsDialog->setRetryIovation(settings.value("retry_iovation", true).toBool());
 
     defaultAutoLogin = settings.value("default_autologin", false).toBool();
     defaultServerLocation = settings.value("default_serverlocation", 0).toInt();
@@ -135,6 +136,7 @@ void MainWindow::saveSettings()
     settings.setValue("disable_nosmall", settingsDialog->getDisabledNosmall());
     settings.setValue("check_updates", settingsDialog->getCheckUpdates());
     settings.setValue("confirm_remove_account", settingsDialog->getConfirmRemoveAccount());
+    settings.setValue("retry_iovation", settingsDialog->getRetryIovation());
     settings.setValue("default_autologin", defaultAutoLogin);
     settings.setValue("default_serverlocation", defaultServerLocation);
     settings.setValue("default_server", defaultServer);
@@ -2101,7 +2103,8 @@ void MainWindow::openAccount(const Profile *profile, QQueue<int> accountIndexes)
 
     ui->statusbar->showMessage("Trying to open account " + gameAccount.getName(), 10000);
 
-    QString token = gameAccount.getGfAcc()->getToken(gameAccount.getId());
+    const int maxAttempts = settingsDialog->getRetryIovation() ? 3 : 1;
+    QString token = gameAccount.getGfAcc()->getToken(gameAccount.getId(), maxAttempts);
 
     if (token.isEmpty()) {
         QString detail = gameAccount.getGfAcc()->getAuth()->getLastError();

@@ -13,6 +13,9 @@ public:
     void loadFromDisk();
     void update();
 
+    // Refresh fingerprint fields and always rotate the vector before auth/iovation.
+    void prepareForAuth();
+
     Fingerprint getFingerprint() const;
 
     void setRequest(const QJsonValue& request);

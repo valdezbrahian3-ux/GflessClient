@@ -59,9 +59,9 @@ void GameforgeAccount::updateGameAccounts()
     gameAccounts = auth->getAccounts();
 }
 
-QString GameforgeAccount::getToken(const QString &accountId) const
+QString GameforgeAccount::getToken(const QString &accountId, int maxAttempts) const
 {
-    return auth->getToken(accountId);
+    return auth->getToken(accountId, maxAttempts);
 }
 
 QString GameforgeAccount::getEmail() const

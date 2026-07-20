@@ -36,6 +36,10 @@ public:
 
     void updateVector();
 
+    // Always advance the fingerprint vector (ignores the 1s gate in updateVector).
+    // Needed so consecutive iovation requests do not reuse a near-identical blackbox.
+    void forceRotateVector();
+
     void updateCreation();
 
     void updateServerTime();

@@ -33,7 +33,7 @@ public:
 
     void updateGameAccounts();
 
-    QString getToken(const QString& accountId) const;
+    QString getToken(const QString& accountId, int maxAttempts = 1) const;
     QString getEmail() const;
 
     QString getPassword() const;

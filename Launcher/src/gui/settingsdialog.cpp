@@ -117,6 +117,16 @@ bool SettingsDialog::getConfirmRemoveAccount() const
     return ui->confirmRemoveAccountCheckbox->isChecked();
 }
 
+void SettingsDialog::setRetryIovation(bool b)
+{
+    ui->retryIovationCheckbox->setChecked(b);
+}
+
+bool SettingsDialog::getRetryIovation() const
+{
+    return ui->retryIovationCheckbox->isChecked();
+}
+
 void SettingsDialog::on_selectGamePathButton_clicked()
 {
     QString path = QFileDialog::getOpenFileName(this, "Select NostaleClientX.exe", QDir::rootPath(), "NostaleClientX.exe (NostaleClientX.exe)");
